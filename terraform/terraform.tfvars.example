@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and fill in (terraform.tfvars is git-ignored)
+project_id = "<PROJECT_ID>"
+region     = "europe-west1"
+app_name   = "todoapp"
+
+# Principals allowed to call the private Cloud Run service
+invoker_members = [
+  "user:<INTERVIEWER_EMAIL>",
+  "user:<YOUR_EMAIL>",
+]
+
+# Fill in after connecting the GitHub repo to Cloud Build (leave empty to skip the trigger)
+github_owner = "<GITHUB_OWNER>"
+github_repo  = "<GITHUB_REPO>"

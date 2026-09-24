@@ -45,6 +45,29 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Database health check endpoint (verifies the Cloud SQL connection)
+app.get('/health/db', async (req, res) => {
+  try {
+    const { latencyMs, version } = await db.healthCheck();
+    res.json({
+      success: true,
+      message: 'Database connection is healthy',
+      database: process.env.POSTGRES_DB,
+      host: process.env.POSTGRES_HOST,
+      latencyMs,
+      version,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    res.status(503).json({
+      success: false,
+      message: 'Database connection failed',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // API routes
 app.use('/api/todos', todosRouter);
 

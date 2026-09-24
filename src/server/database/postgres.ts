@@ -1,36 +1,44 @@
 import { promises as fs } from 'fs';
-import { Client } from 'pg';
+import { Pool } from 'pg';
 import waitPort from 'wait-port';
 import { TodoItem } from '../../shared/types/todo.js';
 import { DatabaseInterface } from './interface.js';
 
 export class PostgresDatabase implements DatabaseInterface {
-  private client: Client | null = null;
+  private client: Pool | null = null;
 
   async init(): Promise<void> {
     const config = await this.getConfig();
 
-    console.log(`Waiting for PostgreSQL at ${config.host}:${config.port || 5432}...`);
+    // Cloud SQL on Cloud Run is reached through a unix socket directory
+    // (e.g. /cloudsql/PROJECT:REGION:INSTANCE), so there is no TCP port to wait for.
+    const isUnixSocket = config.host.startsWith('/');
 
-    const portOpen = await waitPort({
-      host: config.host,
-      port: config.port || 5432,
-      timeout: 30000,
-      waitForDns: true,
-    });
+    if (isUnixSocket) {
+      console.log(`Using PostgreSQL unix socket at ${config.host}`);
+    } else {
+      console.log(`Waiting for PostgreSQL at ${config.host}:${config.port}...`);
 
-    if (!portOpen) {
-      throw new Error(
-        `Unable to connect to PostgreSQL at ${config.host}:${config.port || 5432}. Make sure the database is running.`
-      );
+      const portOpen = await waitPort({
+        host: config.host,
+        port: config.port,
+        timeout: 30000,
+        waitForDns: true,
+      });
+
+      if (!portOpen) {
+        throw new Error(
+          `Unable to connect to PostgreSQL at ${config.host}:${config.port}. Make sure the database is running.`
+        );
+      }
+
+      console.log('PostgreSQL is ready, connecting...');
     }
 
-    console.log('PostgreSQL is ready, connecting...');
-
-    this.client = new Client(config);
+    this.client = new Pool({ ...config, max: 5, idleTimeoutMillis: 30000 });
 
     try {
-      await this.client.connect();
+      await this.client.query('SELECT 1');
       console.log(`Connected to postgres db at host ${config.host}`);
 
       await this.client.query(`
@@ -58,6 +66,14 @@ export class PostgresDatabase implements DatabaseInterface {
         throw err;
       }
     }
+  }
+
+  async healthCheck(): Promise<{ latencyMs: number; version: string }> {
+    if (!this.client) throw new Error('Database not initialized');
+
+    const start = Date.now();
+    const result = await this.client.query('SELECT version() AS version');
+    return { latencyMs: Date.now() - start, version: result.rows[0].version };
   }
 
   async getItems(): Promise<TodoItem[]> {
@@ -165,6 +181,7 @@ export class PostgresDatabase implements DatabaseInterface {
       POSTGRES_PASSWORD_FILE: PASSWORD_FILE,
       POSTGRES_DB: DB,
       POSTGRES_DB_FILE: DB_FILE,
+      POSTGRES_PORT: PORT,
     } = process.env;
 
     const host = HOST_FILE ? (await fs.readFile(HOST_FILE, 'utf8')).trim() : HOST;
@@ -176,6 +193,6 @@ export class PostgresDatabase implements DatabaseInterface {
       throw new Error('Missing required PostgreSQL configuration');
     }
 
-    return { host, user, password, database, port: 5432 };
+    return { host, user, password, database, port: Number(PORT) || 5432 };
   }
 }

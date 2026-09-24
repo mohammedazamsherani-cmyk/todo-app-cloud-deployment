@@ -3,6 +3,7 @@ import { TodoItem } from '../../shared/types/todo.js';
 export interface DatabaseInterface {
   init(): Promise<void>;
   teardown(): Promise<void>;
+  healthCheck(): Promise<{ latencyMs: number; version: string }>;
   getItems(): Promise<TodoItem[]>;
   getItem(id: string): Promise<TodoItem | null>;
   storeItem(item: TodoItem): Promise<void>;

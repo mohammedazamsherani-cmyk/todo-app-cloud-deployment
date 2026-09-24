@@ -1,7 +1,13 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { ApiError } from '../../shared/types/api.js';
 
-export const errorHandler = (err: Error | ApiError, req: Request, res: Response) => {
+// Express only treats a middleware as an error handler when it declares 4 arguments.
+export const errorHandler = (
+  err: Error | ApiError,
+  req: Request,
+  res: Response,
+  _next: NextFunction
+) => {
   console.error('Error occurred:', err);
 
   // Handle custom API errors

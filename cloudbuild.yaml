@@ -1,0 +1,57 @@
+# ========================================
+# Cloud Build pipeline: test -> build -> push -> deploy
+# Triggered on push to main (trigger is created by Terraform, see terraform/cloudbuild.tf).
+#
+# Replace the placeholder substitution values below, or override them in the trigger.
+# ========================================
+substitutions:
+  _REGION: europe-west1                 # <REGION>
+  _AR_REPO: todoapp                     # <ARTIFACT_REGISTRY_REPO>
+  _IMAGE: todoapp                       # <IMAGE_NAME>
+  _SERVICE: todoapp                     # <CLOUD_RUN_SERVICE_NAME>
+
+options:
+  logging: CLOUD_LOGGING_ONLY           # required when the build runs as a user-managed service account
+  dynamicSubstitutions: true
+
+steps:
+  # 1. Run the unit tests inside the Dockerfile's "test" stage
+  - id: test
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args: ['build', '--target', 'test', '-t', 'todoapp-test', '.']
+
+  # 2. Build the production image, tagged with the commit SHA and "latest"
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args:
+      - build
+      - --target=production
+      - -t=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE}:${SHORT_SHA}
+      - -t=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE}:latest
+      - .
+
+  # 3. Push both tags to Artifact Registry
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE}']
+
+  # 4. Roll out the new image to Cloud Run.
+  #    Only the image changes; env vars, Cloud SQL socket, secrets and IAM stay as Terraform defined them.
+  #    Note: no --allow-unauthenticated, the service stays private.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --quiet
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_IMAGE}:${SHORT_SHA}
+
+timeout: 1200s
