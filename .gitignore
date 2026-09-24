@@ -138,6 +138,8 @@ $RECYCLE.BIN/
 .terraform/
 .terraform.lock.hcl
 terraform/terraform.tfvars
+terraform/tfplan
+*.tfplan
 
 # ========================================
 # Security & Sensitive Data
