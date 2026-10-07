@@ -127,7 +127,7 @@ async function startServer() {
 
     // Handle server errors
     server.on('error', (error) => {
-      console.error('Server error========:', error);
+      console.error('Server error==:', error);
       process.exit(1);
     });
   } catch (error) {
